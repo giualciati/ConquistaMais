@@ -141,6 +141,8 @@ export default function Home({
   name,
   foto,
   onFoto,
+  sequencia = 0,
+  onExtrato,
   points,
   delta,
   challenges,
@@ -190,6 +192,21 @@ export default function Home({
           <AnimatedNumber value={points} className="points-value" />
           <span className="points-unit">pts</span>
           <DeltaBadge delta={delta} />
+        </div>
+
+        <div className="points-meta">
+          <span className={`streak ${sequencia > 0 ? "on" : ""}`}>
+            {sequencia > 0
+              ? `🔥 ${sequencia} ${sequencia === 1 ? "dia seguido" : "dias seguidos"}`
+              : "Faça check-in para iniciar uma sequência"}
+          </span>
+          <button
+            className="link-btn"
+            style={{ width: "auto", margin: 0, padding: 0 }}
+            onClick={onExtrato}
+          >
+            Ver extrato
+          </button>
         </div>
 
         <button

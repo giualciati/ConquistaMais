@@ -7,6 +7,8 @@ import {
   QrCode,
   FileCheck,
   Settings,
+  Activity,
+  KeyRound,
 } from "lucide-react";
 
 const TABS = [
@@ -20,7 +22,9 @@ const TABS = [
 export const TABS_EQUIPE = [
   { key: "desafios", label: "Desafios", Icon: ClipboardList },
   { key: "qr", label: "QR Code", Icon: QrCode },
-  { key: "certs", label: "Certificados", Icon: FileCheck },
+  { key: "certs", label: "Certif.", Icon: FileCheck },
+  { key: "relatorio", label: "Relatório", Icon: Activity },
+  { key: "senhas", label: "Senhas", Icon: KeyRound },
   { key: "mais", label: "Mais", Icon: Settings },
 ];
 

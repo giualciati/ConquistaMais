@@ -10,9 +10,12 @@ import Desafios from "./screens/equipe/Desafios";
 import QrEvento from "./screens/equipe/QrEvento";
 import Certificados from "./screens/equipe/Certificados";
 import Mais from "./screens/equipe/Mais";
+import Relatorio from "./screens/equipe/Relatorio";
+import Senhas from "./screens/equipe/Senhas";
 import TabBar, { TABS_EQUIPE } from "./components/TabBar";
 import ValidarModal from "./components/ValidarModal";
 import FotoModal from "./components/FotoModal";
+import ExtratoModal from "./components/ExtratoModal";
 import { GpsModal, VoucherModal } from "./components/Modals";
 import { supabase, hojeSP } from "./lib/supabase";
 
@@ -35,18 +38,19 @@ export default function App() {
   const [validar, setValidar] = useState(null);
   const [voucherView, setVoucherView] = useState(null);
   const [toast, setToast] = useState(null);
-  // true quando o aluno abre o link de "esqueci minha senha" (o link traz type=recovery)
-  const [recuperando, setRecuperando] = useState(() =>
-    window.location.hash.includes("type=recovery"),
-  );
   const [fotoUrl, setFotoUrl] = useState(null);
   const [fotoModal, setFotoModal] = useState(false);
   const [qrSel, setQrSel] = useState(null); // desafio escolhido na aba QR Code (equipe)
+  const [extrato, setExtrato] = useState(false);
+  const [resumo, setResumo] = useState({
+    ganhos: 0,
+    gastos: 0,
+    ganhos_mes: 0,
+    sequencia: 0,
+  });
 
   const user =
-    !recuperando && perfil && !perfil.trocar_senha
-      ? perfil.nome.split(" ")[0]
-      : null;
+    perfil && !perfil.trocar_senha ? perfil.nome.split(" ")[0] : null;
   const ehEquipe = !!user && perfil.papel === "equipe"; // a equipe tem um painel próprio, diferente do app do aluno
   const checkinRef = useRef(0);
   const toastTimer = useRef(null);
@@ -58,7 +62,16 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 2600);
   }, []);
 
-  const ganhou = (valor) => setDelta({ key: Date.now(), value: valor });
+  // Ganhos, gastos e sequência de dias (vêm do servidor)
+  const carregarResumo = useCallback(async () => {
+    const { data } = await supabase.rpc("meu_resumo");
+    if (data) setResumo(data);
+  }, []);
+
+  const ganhou = (valor) => {
+    setDelta({ key: Date.now(), value: valor });
+    carregarResumo();
+  };
 
   /* ---- Dados do servidor ---- */
   const atualizarSaldo = useCallback(async () => {
@@ -128,9 +141,10 @@ export default function App() {
         setCheckedIn(!!(c && c.length));
         atualizarSaldo();
         carregarDesafios();
+        carregarResumo();
       }
     },
-    [atualizarSaldo, carregarDesafios],
+    [atualizarSaldo, carregarDesafios, carregarResumo],
   );
 
   useEffect(() => {
@@ -139,38 +153,13 @@ export default function App() {
       carregarPerfil(data.session.user.id).finally(() => setCarregando(false));
     });
     const { data: sub } = supabase.auth.onAuthStateChange((evento, session) => {
-      if (evento === "PASSWORD_RECOVERY") setRecuperando(true);
-      else if (evento === "SIGNED_OUT") setPerfil(null);
+      if (evento === "SIGNED_OUT") setPerfil(null);
       // setTimeout evita travar o cliente do Supabase ao fazer chamadas dentro do callback
       else if (evento === "SIGNED_IN" && session)
         setTimeout(() => carregarPerfil(session.user.id), 0);
     });
     return () => sub.subscription.unsubscribe();
   }, [carregarPerfil]);
-
-  // Link de redefinição inválido ou vencido
-  useEffect(() => {
-    if (window.location.hash.includes("error_code")) {
-      showToast(
-        "Link inválido ou expirado",
-        'Peça um novo link em "Esqueci minha senha"',
-        "error",
-      );
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, [showToast]);
-
-  const concluirRecuperacao = async () => {
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search,
-    );
-    setRecuperando(false);
-    const { data } = await supabase.auth.getSession();
-    if (data.session) await carregarPerfil(data.session.user.id);
-    showToast("Senha alterada!", "Você já pode usar o app");
-  };
 
   // Foto do perfil: link temporário gerado a partir do arquivo privado
   const fotoPath = perfil ? perfil.foto_path : null;
@@ -186,8 +175,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     atualizarSaldo();
+    carregarResumo();
     if (tab === "store") carregarLoja();
-  }, [user, tab, atualizarSaldo, carregarLoja]);
+  }, [user, tab, atualizarSaldo, carregarResumo, carregarLoja]);
 
   // Desafios (inclusive os relâmpago) são atualizados a cada 30 s
   useEffect(() => {
@@ -363,6 +353,8 @@ export default function App() {
     setTab("home");
     setPoints(0);
     setDelta(null);
+    setExtrato(false);
+    setResumo({ ganhos: 0, gastos: 0, ganhos_mes: 0, sequencia: 0 });
     setChallenges([]);
     setRewards([]);
     setVouchers([]);
@@ -383,8 +375,8 @@ export default function App() {
             </p>
           </div>
         )}
-        {!carregando && !recuperando && !perfil && <Login />}
-        {!carregando && !recuperando && perfil && perfil.trocar_senha && (
+        {!carregando && !perfil && <Login />}
+        {!carregando && perfil && perfil.trocar_senha && (
           <TrocarSenha
             nome={perfil.nome.split(" ")[0]}
             onDone={() => carregarPerfil(perfil.id)}
@@ -396,6 +388,8 @@ export default function App() {
             name={user}
             foto={fotoUrl}
             onFoto={() => setFotoModal(true)}
+            sequencia={resumo.sequencia}
+            onExtrato={() => setExtrato(true)}
             points={points}
             delta={delta}
             challenges={challenges}
@@ -415,6 +409,7 @@ export default function App() {
         )}
         {user && !ehEquipe && tab === "store" && (
           <Store
+            onExtrato={() => setExtrato(true)}
             points={points}
             delta={delta}
             rewards={rewards}
@@ -435,6 +430,8 @@ export default function App() {
           <QrEvento selId={qrSel} onSel={setQrSel} />
         )}
         {ehEquipe && tab === "certs" && <Certificados />}
+        {ehEquipe && tab === "relatorio" && <Relatorio />}
+        {ehEquipe && tab === "senhas" && <Senhas />}
         {ehEquipe && tab === "mais" && (
           <Mais nome={perfil.nome} onLogout={logout} />
         )}
@@ -475,6 +472,13 @@ export default function App() {
           uid={perfil.id}
           onClose={() => setValidar(null)}
           onResult={aposValidar}
+        />
+      )}
+      {extrato && (
+        <ExtratoModal
+          points={points}
+          resumo={resumo}
+          onClose={() => setExtrato(false)}
         />
       )}
       {fotoModal && (

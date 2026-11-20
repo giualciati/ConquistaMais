@@ -11,7 +11,7 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!user.trim() || !pass) return setErro("Informe usuário e senha.");
+    if (!user.trim() || !pass) return setErro("Informe e-mail e senha.");
     setLoading(true);
     setErro("");
     const { error } = await supabase.auth.signInWithPassword({
@@ -19,7 +19,7 @@ export default function Login() {
       password: pass,
     });
     setLoading(false);
-    if (error) setErro("Usuário ou senha incorretos.");
+    if (error) setErro("E-mail ou senha incorretos.");
     // Em caso de sucesso, o App detecta a sessão (onAuthStateChange) e muda de tela.
   };
 
@@ -37,7 +37,8 @@ export default function Login() {
         <label className="input-row">
           <User size={18} color="var(--graphite-soft)" />
           <input
-            placeholder="Usuário"
+            placeholder="E-mail institucional"
+            inputMode="email"
             autoCapitalize="none"
             autoComplete="username"
             value={user}
