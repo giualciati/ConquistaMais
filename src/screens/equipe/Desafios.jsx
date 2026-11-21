@@ -97,6 +97,15 @@ function FormDesafio({ categoriaInicial, desafio, onClose, onCriado }) {
       : padroes(categoriaInicial),
   );
   const [duracao, setDuracao] = useState(30);
+  const [cursos, setCursos] = useState(
+    desafio && desafio.cursos ? desafio.cursos : [],
+  ); // vazio = todos os cursos
+  const [lista, setLista] = useState([]);
+  useEffect(() => {
+    supabase
+      .rpc("cursos_cadastrados")
+      .then(({ data }) => setLista((data || []).map((x) => x.curso)));
+  }, []);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -120,6 +129,7 @@ function FormDesafio({ categoriaInicial, desafio, onClose, onCriado }) {
     const datas = {
       p_abre_em: abreD.toISOString(),
       p_fecha_em: fechaD.toISOString(),
+      p_cursos: cursos,
     };
     const { error } = edit
       ? await supabase.rpc("editar_desafio", {
@@ -249,6 +259,41 @@ function FormDesafio({ categoriaInicial, desafio, onClose, onCriado }) {
             </div>
           </div>
         )}
+        <div className="field">
+          <label>Quem pode participar</label>
+          <div className="chips" style={{ flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className={`chip ${cursos.length === 0 ? "on" : ""}`}
+              style={{ maxWidth: "none" }}
+              onClick={() => setCursos([])}
+            >
+              Todos os cursos
+            </button>
+            {[...new Set([...lista, ...cursos])].map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`chip ${cursos.includes(c) ? "on" : ""}`}
+                style={{ maxWidth: "none" }}
+                onClick={() =>
+                  setCursos(
+                    cursos.includes(c)
+                      ? cursos.filter((x) => x !== c)
+                      : [...cursos, c],
+                  )
+                }
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <div className="mini">
+            {cursos.length
+              ? "Só alunos destes cursos verão o desafio e poderão participar."
+              : "Todos os alunos verão o desafio e poderão participar."}
+          </div>
+        </div>
         {edit && (
           <div className="mini">
             O tipo não pode ser alterado. Para reabrir um desafio encerrado,
@@ -374,6 +419,17 @@ export default function Desafios({ onVerQR }) {
                 </div>
                 <div className="mini">
                   {fmt(d.abre_em)} → {fmt(d.fecha_em)}
+                </div>
+                <div className="tags">
+                  {d.cursos && d.cursos.length ? (
+                    d.cursos.map((c) => (
+                      <span key={c} className="tag">
+                        {c}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="tag all">Todos os cursos</span>
+                  )}
                 </div>
                 <div className="mini" style={{ display: "flex", gap: 14 }}>
                   <span>

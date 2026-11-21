@@ -71,6 +71,9 @@ export function ChallengeCard({ item, onPress }) {
           )}
           {item.validacao === "qr" ? "QR Code ou código" : "Certificado em PDF"}{" "}
           · até {fmtData(item.fecha_em)}
+          {item.cursos && item.cursos.length > 0
+            ? ` · Para ${item.cursos.join(", ")}`
+            : ""}
         </div>
         <div className="challenge-footer">
           <span className="challenge-pts">+{item.points} pts</span>

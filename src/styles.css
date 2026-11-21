@@ -1499,3 +1499,23 @@ p {
 .tab-label {
   white-space: nowrap;
 }
+
+/* Tags de curso */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.tag.all {
+  background: var(--bg);
+  color: var(--graphite-soft);
+  border: 1px solid var(--border);
+}
