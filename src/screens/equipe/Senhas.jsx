@@ -1,177 +1,173 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { User, KeyRound, RefreshCw } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 
-const PERIODOS = [
-  ["7d", "7 dias"],
-  ["mes", "Este mês"],
-  ["tudo", "Tudo"],
-];
-const CAT = {
-  palestra: "Palestra",
-  curso: "Curso",
-  certificado: "Certificado",
-  acao: "Ação",
-  relampago: "Relâmpago",
+// Senha provisória aleatória (sem letras que se confundem, como 0/O e 1/l)
+const gerarSenha = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  return Array.from(
+    crypto.getRandomValues(new Uint32Array(10)),
+    (n) => chars[n % chars.length],
+  ).join("");
 };
 
-const Metrica = ({ valor, rotulo, sub, destaque }) => (
-  <div
-    className="metric"
-    style={destaque ? { border: "2px solid var(--orange)" } : undefined}
-  >
-    <b>{valor}</b>
-    <span>{rotulo}</span>
-    {sub && <small>{sub}</small>}
-  </div>
-);
+const quando = (iso) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-export default function Relatorio() {
-  const [periodo, setPeriodo] = useState("mes");
-  const [d, setD] = useState(null);
-  const [erro, setErro] = useState(false);
+function RedefinirSenha({ onFeito }) {
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const enviar = async (e) => {
+    e.preventDefault();
+    if (
+      !window.confirm(
+        `Redefinir a senha de "${usuario.trim()}"? O aluno será desconectado e precisará criar uma nova senha no próximo acesso.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setRes(null);
+    const { data, error } = await supabase.rpc("redefinir_senha", {
+      p_usuario: usuario,
+      p_senha: senha,
+    });
+    setBusy(false);
+    if (error)
+      return setRes({ ok: false, texto: "Erro ao redefinir. Tente de novo." });
+    if (data.ok) {
+      setRes({
+        ok: true,
+        texto: `Senha de ${data.nome} redefinida. Informe a senha provisória ao aluno: ${senha}`,
+      });
+      setUsuario("");
+      setSenha("");
+      onFeito();
+    } else {
+      setRes({
+        ok: false,
+        texto:
+          data.motivo === "senha_curta"
+            ? "A senha provisória precisa ter pelo menos 8 caracteres."
+            : "Aluno não encontrado. Confira o usuário.",
+      });
+    }
+  };
+
+  return (
+    <form
+      className="card pending"
+      style={{ flexDirection: "column", alignItems: "stretch" }}
+      onSubmit={enviar}
+    >
+      <label className="input-row">
+        <User size={18} color="var(--graphite-soft)" />
+        <input
+          placeholder="Usuário do aluno"
+          autoCapitalize="none"
+          value={usuario}
+          onChange={(e) => setUsuario(e.target.value)}
+        />
+      </label>
+      <label className="input-row">
+        <KeyRound size={18} color="var(--graphite-soft)" />
+        <input
+          placeholder="Senha provisória"
+          autoCapitalize="none"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+        />
+        <button
+          type="button"
+          className="eye"
+          aria-label="Gerar senha"
+          onClick={() => setSenha(gerarSenha())}
+        >
+          <RefreshCw size={18} />
+        </button>
+      </label>
+      <button
+        type="submit"
+        className="btn primary full"
+        disabled={!usuario.trim() || senha.length < 8 || busy}
+      >
+        Redefinir senha
+      </button>
+      {res && (
+        <div
+          className={res.ok ? "pill green" : "form-error"}
+          style={{ marginBottom: 0 }}
+        >
+          {res.texto}
+        </div>
+      )}
+    </form>
+  );
+}
+
+function UltimasRedefinicoes({ recarregar }) {
+  const [linhas, setLinhas] = useState(null);
+
+  const carregar = useCallback(async () => {
+    const { data, error } = await supabase.rpc("ultimas_redefinicoes");
+    setLinhas(error ? [] : data || []);
+  }, []);
 
   useEffect(() => {
-    let ativo = true;
-    setD(null);
-    supabase
-      .rpc("relatorio_equipe", { p_periodo: periodo })
-      .then(({ data, error }) => {
-        if (!ativo) return;
-        if (error) return setErro(true);
-        setErro(false);
-        setD(data);
-      });
-    return () => {
-      ativo = false;
-    };
-  }, [periodo]);
+    carregar();
+  }, [carregar, recarregar]);
 
-  const pct =
-    d && d.alunos_total
-      ? Math.round((d.alunos_ativos / d.alunos_total) * 100)
-      : 0;
-  const maxCheck = d ? Math.max(1, ...d.checkins_7d.map((x) => x.total)) : 1;
+  if (!linhas) return <div className="empty-box">Carregando…</div>;
+  if (!linhas.length)
+    return <div className="empty-box">Nenhuma redefinição até agora.</div>;
+  return (
+    <div
+      className="card"
+      style={{ flexDirection: "column", alignItems: "stretch" }}
+    >
+      {linhas.map((l, i) => (
+        <div key={i} className="list-row">
+          <span className="grow">
+            <b>{l.aluno}</b>
+            {l.matricula ? ` · ${l.matricula}` : ""}
+            <br />
+            <small>
+              por {l.feito_por} · {quando(l.quando)}
+            </small>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Senhas() {
+  const [versao, setVersao] = useState(0);
 
   return (
     <>
       <div className="tab-header">
-        <h1>Relatório</h1>
-        <p>Como os alunos estão usando o Conquista+</p>
-      </div>
-      <div className="seg">
-        {PERIODOS.map(([k, n]) => (
-          <button
-            key={k}
-            className={periodo === k ? "on" : ""}
-            onClick={() => setPeriodo(k)}
-          >
-            {n}
-          </button>
-        ))}
+        <h1>Senhas</h1>
+        <p>Redefina a senha de um aluno que esqueceu o acesso</p>
       </div>
 
+      <div className="pad">
+        <RedefinirSenha onFeito={() => setVersao((v) => v + 1)} />
+      </div>
+
+      <div className="section-header">
+        <h2>Últimas redefinições</h2>
+      </div>
       <div className="pad stack">
-        {erro && (
-          <div className="empty-box">
-            Não foi possível carregar o relatório.
-          </div>
-        )}
-        {!erro && !d && <div className="empty-box">Carregando…</div>}
-        {d && (
-          <>
-            <div className="metric-grid">
-              <Metrica
-                valor={d.alunos_ativos}
-                rotulo="Alunos ativos"
-                sub={`${pct}% dos ${d.alunos_total} alunos`}
-              />
-              <Metrica valor={d.pontos_ganhos} rotulo="Pontos distribuídos" />
-              <Metrica
-                valor={d.pontos_gastos}
-                rotulo="Pontos trocados na loja"
-              />
-              <Metrica valor={d.checkins} rotulo="Check-ins" />
-              <Metrica valor={d.presencas} rotulo="Presenças em eventos" />
-              <Metrica
-                valor={d.certificados_aprovados}
-                rotulo="Certificados aprovados"
-              />
-              <Metrica
-                valor={d.certificados_pendentes}
-                rotulo="Certificados pendentes"
-                sub="aguardando análise"
-                destaque={d.certificados_pendentes > 0}
-              />
-              <Metrica
-                valor={d.vouchers_emitidos}
-                rotulo="Vouchers emitidos"
-                sub={`${d.vouchers_ativos} ainda não retirados`}
-              />
-            </div>
-
-            <div className="card staff-card">
-              <div className="challenge-title">
-                Check-ins nos últimos 7 dias
-              </div>
-              <div className="bars">
-                {d.checkins_7d.map((x) => (
-                  <div key={x.dia} className="bar">
-                    <small>{x.total}</small>
-                    <div style={{ height: `${(x.total / maxCheck) * 100}%` }} />
-                    <small>{x.dia.slice(0, 5)}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card staff-card">
-              <div className="challenge-title">Desafios mais concluídos</div>
-              {d.top_desafios.length === 0 && (
-                <div className="mini">Sem participações no período.</div>
-              )}
-              {d.top_desafios.map((t, i) => (
-                <div key={i} className="list-row">
-                  <span className="grow ellipsis">
-                    {t.titulo}{" "}
-                    <span className="mini">· {CAT[t.categoria]}</span>
-                  </span>
-                  <b>{t.total}</b>
-                </div>
-              ))}
-            </div>
-
-            <div className="card staff-card">
-              <div className="challenge-title">Por curso</div>
-              {d.por_curso.length === 0 && (
-                <div className="mini">Nenhum aluno cadastrado.</div>
-              )}
-              {d.por_curso.map((c, i) => (
-                <div key={i} className="list-row">
-                  <span className="grow ellipsis">
-                    {c.curso}{" "}
-                    <span className="mini">
-                      · {c.ativos}/{c.alunos} ativos
-                    </span>
-                  </span>
-                  <b>{c.pontos} pts</b>
-                </div>
-              ))}
-            </div>
-
-            <div className="card staff-card">
-              <div className="challenge-title">Recompensas mais resgatadas</div>
-              {d.top_recompensas.length === 0 && (
-                <div className="mini">Nenhum resgate no período.</div>
-              )}
-              {d.top_recompensas.map((t, i) => (
-                <div key={i} className="list-row">
-                  <span className="grow ellipsis">{t.titulo}</span>
-                  <b>{t.total}</b>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+        <UltimasRedefinicoes recarregar={versao} />
       </div>
     </>
   );
